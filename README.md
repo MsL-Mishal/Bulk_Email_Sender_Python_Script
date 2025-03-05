@@ -39,8 +39,8 @@ This project is a Python-based bulk email sender that allows sending personalize
 
 ### 1️⃣ **Clone the Repository**
 ```bash
-git clone https://github.com/your-username/your-repo-name.git
-cd your-repo-name
+git clone https://github.com/MsL-Mishal/Bulk_Email_Sender_Python_Script.git
+cd Bulk_Email_Sender_Python_Script
 ```
 
 ### 2️⃣ **Create and Activate Virtual Environment**
