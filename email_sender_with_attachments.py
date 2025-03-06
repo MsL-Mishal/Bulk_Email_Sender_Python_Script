@@ -3,11 +3,14 @@ import time
 import pandas as pd
 import random
 import os
+import mimetypes
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-from email.mime.base import MIMEBase
+from email.mime.application import MIMEApplication
+from email.mime.image import MIMEImage
 from email import encoders
 from dotenv import load_dotenv
+import logging
 
 # Load environment variables from .env file
 load_dotenv()
@@ -20,6 +23,18 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", 587))
 
 # File paths
 ATTACHMENTS_FOLDER = os.getenv("ATTACHMENTS_FOLDER", "attachments/")
+
+# Logging Configuration
+LOG_FILE = os.getenv("LOG_FILE", "logs/email_log.txt")
+os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)  # Ensure logs directory exists
+
+logging.basicConfig(
+    filename=LOG_FILE,
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S"
+)
+
 
 # Email Subject
 EMAIL_SUBJECT = "Welcome to Our Platform!"
@@ -59,6 +74,27 @@ SENDER_NAME = "John Doe"
 SENDER_DESIGNATION = "HR Manager"
 ORGANIZATION_NAME = "ABC Corp"
 
+def attach_file(msg, attachment_filename):
+    """Attach a file (PDF or Image) to the email."""
+    attachment_path = os.path.join(ATTACHMENTS_FOLDER, attachment_filename)
+
+    if os.path.exists(attachment_path):  # Ensure file exists
+        mime_type, _ = mimetypes.guess_type(attachment_path)  # Detect file type
+        with open(attachment_path, "rb") as attachment_file:
+            if mime_type and mime_type.startswith("image"):  # Image file
+                part = MIMEImage(attachment_file.read(), name=attachment_filename)
+            elif mime_type == "application/pdf":  # PDF file
+                part = MIMEApplication(attachment_file.read(), Name=attachment_filename)
+                part["Content-Disposition"] = f'attachment; filename="{attachment_filename}"'
+            else:  # Other unsupported file types
+                print(f"Unsupported file type: {attachment_filename}")
+                return
+
+            msg.attach(part)
+            print(f"Attached: {attachment_filename}")
+    else:
+        print(f"Warning: Attachment {attachment_filename} not found!")
+
 def send_email(recipient_email, recipient_name, attachment_filename=None):
     try:
         # Set up SMTP server
@@ -82,35 +118,34 @@ def send_email(recipient_email, recipient_name, attachment_filename=None):
         msg.attach(MIMEText(email_body, "plain"))
 
         # Attach file if provided
-        if attachment_filename:
-            attachment_path = os.path.join(ATTACHMENTS_FOLDER, attachment_filename)
-            if os.path.exists(attachment_path):
-                with open(attachment_path, "rb") as attachment:
-                    mime_base = MIMEBase("application", "octet-stream")
-                    mime_base.set_payload(attachment.read())
-                    encoders.encode_base64(mime_base)
-                    mime_base.add_header(
-                        "Content-Disposition", f"attachment; filename={attachment_filename}"
-                    )
-                    msg.attach(mime_base)
+        if attachment_filename and isinstance(attachment_filename, str) and attachment_filename.strip():
+            attach_file(msg, attachment_filename.strip())
 
         # Send email
         server.sendmail(SENDER_EMAIL, recipient_email, msg.as_string())
         server.quit()
 
-        print(f"Email sent successfully to {recipient_name} ({recipient_email})")
+        success_message = f"Email sent successfully to {recipient_name} ({recipient_email})"
+        print(success_message)
+        logging.info(success_message)  # Log success
 
     except Exception as e:
-        print(f"Failed to send email to {recipient_name} ({recipient_email}): {e}")
+        error_message = f"Failed to send email to {recipient_name} ({recipient_email}): {e}"
+        print(error_message)
+        logging.error(error_message)  # Log failure
+
 
 # Process emails in batches
 for i in range(0, len(df), BATCH_SIZE):
     batch = df.iloc[i : i + BATCH_SIZE]
     
+    logging.info(f"Starting batch {i//BATCH_SIZE + 1} with {len(batch)} emails.")
+    
     for index, row in batch.iterrows():
         attachment_filename = row["Attachment"] if "Attachment" in df.columns and pd.notna(row["Attachment"]) else None
         send_email(row["Email"], row["Username"], attachment_filename)
-        time.sleep(DELAY_BETWEEN_EMAILS)  # Wait before sending next email
+        
+        time.sleep(DELAY_BETWEEN_EMAILS)  # Random delay
 
-    print(f"Batch {i // BATCH_SIZE + 1} completed. Waiting {DELAY_BETWEEN_BATCHES / 60} minutes before next batch...")
-    time.sleep(DELAY_BETWEEN_BATCHES)  # Pause between batches
+    logging.info(f"Completed batch {i//BATCH_SIZE + 1}. Waiting {DELAY_BETWEEN_BATCHES} seconds before next batch.")
+    time.sleep(DELAY_BETWEEN_BATCHES)
