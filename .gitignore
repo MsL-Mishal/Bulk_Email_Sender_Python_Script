@@ -4,3 +4,4 @@ email_list_private_with_attachments.xlsx
 email_sender_private.py
 email_sender_private_with_attachments.py
 logs/email_log.txt
+!logs/
